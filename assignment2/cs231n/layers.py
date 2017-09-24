@@ -311,7 +311,44 @@ def batchnorm_backward_alt(dout, cache):
 
     Inputs / outputs: Same as batchnorm_backward
     """
+    x, sample_mean, sample_var, gamma, beta, bn_param = cache
+    
+    mode = bn_param['mode']
+    eps = bn_param.get('eps', 1e-5)
+    
+    N = x.shape[0]
+    D = x.shape[1]
+    sx = (x-sample_mean)/(sample_var+eps)
+    
+    # print(sample_var.shape, (x-sample_mean).shape)
+    doutdstd = ((x-sample_mean)*(-1)/((sample_var+eps)**2)).reshape((N,1,D))
+    dstddx = ((1/2)*(1/sample_var)*(1/N)*2*(x-sample_mean)).reshape((1,N,D))
+    doutdstddx = np.einsum("jki,kli->jli", doutdstd, dstddx)
+    
+    # print(doutdstd.shape, dstddx.shape, doutdstddx.shape)
+    doutdmean = (-1/(sample_var+eps)*np.ones_like(x)).reshape((N,1,D))
+    dmeandx = (1/N*np.ones_like(x)).reshape((1,N,D))
+    doutdmeandx = np.einsum("jki,kli->jli", doutdmean, dmeandx)
+    # print(doutdmean.shape, dmeandx.shape, doutdmeandx.shape)
+    doutdx = np.zeros((N, N, D))
+    doutdx[range(N),range(N),:] = 1
+    doutdx /= sample_var+eps
+    # print(doutdx[:,:,1], doutdx[:,:,0])
+    # 1/sample_var*np.ones_like(x)
+    
+    
+    # dmeandx = 
+    # print(dstddx.shape, doutdstd.shape)
     dx, dgamma, dbeta = None, None, None
+    dx = doutdx + doutdstddx + doutdmeandx
+    # print(doutdx.shape, doutdstddx.shape, doutdmeandx.shape, dx.shape)
+    dx = np.einsum("ijk,jk->ik", dx, dout)
+    
+    
+    dx *= gamma
+    
+    dgamma = np.sum(dout*sx, axis=0)
+    dbeta = np.sum(dout, axis=0)
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
@@ -320,12 +357,13 @@ def batchnorm_backward_alt(dout, cache):
     # should be able to compute gradients with respect to the inputs in a     #
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
-    pass
+    # pass
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
 
     return dx, dgamma, dbeta
+    # return batchnorm_backward(dout, cache)
 
 
 def dropout_forward(x, dropout_param):
