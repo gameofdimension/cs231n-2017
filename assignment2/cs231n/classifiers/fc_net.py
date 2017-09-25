@@ -138,6 +138,23 @@ class TwoLayerNet(object):
 
         return loss, grads
 
+def affine_bn_relu_forward(x, w, b, gamma, beta, bn_param):
+    a, fc_cache = affine_forward(x, w, b)
+    # gamma = self.params['gamma'+str(i+1)] = 1.0
+    # beta = self.params['beta'+str(i+1)] = 0.0
+    t, bn_cache = batchnorm_forward(a, gamma, beta, bn_param)
+    # l_bn_cache.append(bn_cache)
+    
+    out, relu_cache = relu_forward(t)
+    cache = (fc_cache, bn_cache, relu_cache)
+    return out, cache
+
+def affine_bn_relu_backward(dout, cache):
+    fc_cache, bn_cache, relu_cache = cache
+    da = relu_backward(dout, relu_cache)
+    dn, dgamma, dbeta = batchnorm_backward_alt(da, bn_cache)
+    dx, dw, db = affine_backward(dn, fc_cache)
+    return dx, dw, db, dgamma, dbeta
 
 class FullyConnectedNet(object):
     """
@@ -225,6 +242,9 @@ class FullyConnectedNet(object):
         self.bn_params = []
         if self.use_batchnorm:
             self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)]
+            for i in range(self.num_layers-1):
+                self.params['gamma'+str(i+1)] = np.ones((right[i],))
+                self.params['beta'+str(i+1)] = np.zeros((right[i],))
 
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
@@ -266,11 +286,28 @@ class FullyConnectedNet(object):
         lx[:,:] = X
         l_cache = []
         l_d_cache = []
+        # l_bn_cache = []
+        # gamma = []
+        # beta = []
         for i in range(self.num_layers-1):
             w = self.params['W'+str(i+1)]
             b = self.params['b'+str(i+1)]
-            lx, cache = affine_relu_forward(lx, w, b)
-            l_cache.append(cache)
+            # lx, cache = affine_relu_forward(lx, w, b)
+            # l_cache.append(cache)
+            
+            if self.use_batchnorm:
+                # gamma.append(1.0)
+                # beta.append(0.0)
+                gamma = self.params['gamma'+str(i+1)]
+                beta = self.params['beta'+str(i+1)]
+                # lx, bn_cache = batchnorm_forward(lx, gamma, beta, self.bn_params[i])
+                # l_bn_cache.append(bn_cache)
+                lx, cache = affine_bn_relu_forward(lx, w, b, gamma, beta, self.bn_params[i])
+                l_cache.append(cache)
+            else:
+                lx, cache = affine_relu_forward(lx, w, b)
+                l_cache.append(cache)
+            
             # print(self.dropout_param)
             if self.use_dropout:
                 lx, drop_cache = dropout_forward(lx, self.dropout_param)
@@ -301,10 +338,14 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         n = X.shape[0]
+        mx = np.max(scores, axis=1).reshape((-1,1))
+        scores = scores-mx
         exp = np.exp(scores)
         exp_sum = np.sum(exp, axis=1)
-        prob = exp[range(n), y]/exp_sum
-        loss = -np.sum(np.log(prob))/n
+        prob = exp[range(n), y]/(exp_sum+1e-7)
+        # if np.where(prob==0.0)[0].size > 0:
+        #     print(exp[range(n), y])
+        loss = -np.sum(np.log(prob+1e-7))/n
         
         reg_loss = 0.0
         for k in self.params:
@@ -339,7 +380,13 @@ class FullyConnectedNet(object):
             # b = self.params['b'+str(li)]
             if self.use_dropout:
                 dx = dropout_backward(dx, l_d_cache[li-1])
-            dx, dW, db = affine_relu_backward(dx, l_cache[li-1])
+            if self.use_batchnorm:    
+                # dx, dgamma, dbeta = batchnorm_backward_alt(dx, l_bn_cache[li-1])
+                dx, dW, db, dgamma, dbeta = affine_bn_relu_backward(dx, l_cache[li-1])
+                grads['gamma'+str(li)] = dgamma
+                grads['beta'+str(li)] = dbeta
+            else:
+                dx, dW, db = affine_relu_backward(dx, l_cache[li-1])
             # dW /= n
             dW += self.reg*W
             # db /= n
@@ -359,6 +406,7 @@ class FullyConnectedNet(object):
         db1 /= n
         grads['b1'] = db1
         '''
+        # print(self.params.keys(), grads.keys())
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
