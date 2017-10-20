@@ -45,10 +45,11 @@ def make_model(hidden_dim, wordvec_dim, vocab_size):
             list(ztrans.parameters()) + list(cell.parameters())
     # print(params)
 
-    def func(features, captions):
+    def forward(features, captions):
         loss = Variable(torch.Tensor([0.0]))
 
         for feature, caption in zip(features, captions):
+            print(len(caption))
             feature_var = Variable(torch.from_numpy(np.array([feature])))
             # print(feature_var.data.shape)
             # caption_var = Variable(torch.from_numpy(np.array(captions)))
@@ -71,7 +72,7 @@ def make_model(hidden_dim, wordvec_dim, vocab_size):
                 a = softmax(a)
                 z = a*feature_var
         return loss
-    return params, func
+    return params, forward
 
 def step(loss, optimizer):
     loss /= batch_size
