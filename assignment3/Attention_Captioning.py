@@ -143,7 +143,7 @@ iterations_per_epoch = max(num_train // batch_size, 1)
 num_iterations = num_epochs * iterations_per_epoch
 
 params, model = make_model(hidden_dim, wordvec_dim, vocab_size)
-optimizer = optim.Adam(params, lr=1e-2)
+optimizer = optim.Adam(params, lr=1e-3)
 
 # print(data['word_to_idx']['<NULL>'])
 for t in range(num_iterations):
